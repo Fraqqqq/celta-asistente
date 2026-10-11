@@ -25,8 +25,13 @@ FIRMA_NEUTRA = b"skip_thought_signature_validator"
 
 # Errores que justifican probar con el siguiente modelo de la lista.
 ESTADOS_REINTENTABLES = {404, 429, 500, 503, 504}
-# Tras un 429 (cuota por minuto agotada) el modelo se saltea un rato para no perder tiempo.
-SEGUNDOS_PAUSA_CUOTA = 60
+# Saturación momentánea del proveedor: se reintenta una vez el mismo modelo.
+ESTADOS_TRANSITORIOS = {500, 503, 504}
+SEGUNDOS_ANTES_DE_REINTENTAR = 1.5
+# Tras un 429 el modelo se saltea un rato. El free tier tiene cuota por minuto y por día:
+# si se agotó la diaria, no tiene sentido volver a probarlo enseguida.
+SEGUNDOS_PAUSA_CUOTA_MINUTO = 60
+SEGUNDOS_PAUSA_CUOTA_DIA = 3600
 
 
 def _a_contenidos(historial: list[Mensaje], modelo: str) -> list[types.Content]:
@@ -141,6 +146,22 @@ class Gemini:
     async def _intentar(
         self, modelo: str, sistema: str, historial: list[Mensaje], herramientas
     ) -> RespuestaModelo:
+        try:
+            return await self._llamar(modelo, sistema, historial, herramientas)
+        except errors.ClientError as e:
+            if e.code == 400 and "thinking" in str(e).lower():
+                self._sin_razonamiento.add(modelo)
+                return await self._llamar(modelo, sistema, historial, herramientas)
+            raise
+        except errors.APIError as e:
+            if e.code in ESTADOS_TRANSITORIOS:
+                await asyncio.sleep(SEGUNDOS_ANTES_DE_REINTENTAR)
+                return await self._llamar(modelo, sistema, historial, herramientas)
+            raise
+
+    async def _llamar(
+        self, modelo: str, sistema: str, historial: list[Mensaje], herramientas
+    ) -> RespuestaModelo:
         respuesta = await asyncio.wait_for(
             self._cliente.aio.models.generate_content(
                 model=modelo,
@@ -161,20 +182,15 @@ class Gemini:
         for modelo in disponibles or self._modelos:
             inicio = time.perf_counter()
             try:
-                try:
-                    resultado = await self._intentar(modelo, sistema, historial, herramientas)
-                except errors.ClientError as e:
-                    if e.code == 400 and "thinking" in str(e).lower():
-                        self._sin_razonamiento.add(modelo)
-                        resultado = await self._intentar(modelo, sistema, historial, herramientas)
-                    else:
-                        raise
+                resultado = await self._intentar(modelo, sistema, historial, herramientas)
             except TimeoutError:
                 log.warning("%s no respondió en %.0f s; pruebo el siguiente", modelo, self._espera)
                 continue
             except errors.APIError as e:
                 if e.code == 429:
-                    self._pausados[modelo] = time.monotonic() + SEGUNDOS_PAUSA_CUOTA
+                    diaria = "PerDay" in str(e)
+                    pausa = SEGUNDOS_PAUSA_CUOTA_DIA if diaria else SEGUNDOS_PAUSA_CUOTA_MINUTO
+                    self._pausados[modelo] = time.monotonic() + pausa
                 if e.code in ESTADOS_REINTENTABLES:
                     log.warning("%s devolvió %s; pruebo el siguiente", modelo, e.code)
                     continue

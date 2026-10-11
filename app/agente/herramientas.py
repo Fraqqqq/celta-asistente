@@ -343,7 +343,8 @@ DEFINICIONES = [
     ),
     DefinicionHerramienta(
         "reservar_turno",
-        "Propone reservar un turno. No lo reserva: el paciente lo confirma con un botón.",
+        "Propone reservar un turno. No lo reserva: el paciente confirma o descarta con un "
+        "botón, así que no le preguntes antes si está seguro.",
         {
             "type": "object",
             "properties": {
@@ -361,7 +362,8 @@ DEFINICIONES = [
     ),
     DefinicionHerramienta(
         "cancelar_turno",
-        "Propone cancelar un turno activo. El paciente lo confirma con un botón.",
+        "Propone cancelar un turno activo. Llamala en cuanto identifiques el turno, sin "
+        "preguntar antes si está seguro: el paciente confirma o descarta con un botón.",
         {
             "type": "object",
             "properties": {"turno_id": _ID, "motivo": {"type": "string"}},

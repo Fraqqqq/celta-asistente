@@ -11,7 +11,8 @@ class Configuracion(BaseSettings):
     # --- Modelo de lenguaje ---
     gemini_api_key: str = ""
     # Se prueban en orden: si uno está saturado (429/503) o tarda demasiado, se pasa al siguiente.
-    modelos: str = "gemini-3.6-flash,gemini-flash-lite-latest,gemini-3.8-flash"
+    # Los "flash-lite" tienen la cuota gratuita más amplia; ver docs/adr/0001-modelo.md.
+    modelos: str = "gemini-flash-lite-latest,gemini-3.1-flash-lite,gemini-3.8-flash"
     segundos_espera_modelo: float = 25.0
     pasos_maximos: int = 6  # llamadas al modelo por mensaje del paciente
 
