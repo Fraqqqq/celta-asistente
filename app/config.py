@@ -42,6 +42,9 @@ class Configuracion(BaseSettings):
     horas_contexto: int = 6  # pasado este tiempo sin mensajes, la conversación arranca de cero
     mensajes_por_ventana: int = 20  # límite por conversación...
     minutos_ventana: int = 10  # ...en esta ventana de tiempo
+    # Topes para todo el servicio, por debajo de la cuota gratuita de Gemini.
+    mensajes_globales_por_minuto: int = 10
+    mensajes_globales_por_dia: int = 600
 
     @property
     def url_webhook(self) -> str | None:

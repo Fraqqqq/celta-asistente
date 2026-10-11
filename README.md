@@ -10,7 +10,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.143-009688?logo=fastapi&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini-function%20calling-8E75B2?logo=googlegemini&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot%20API-26A5E4?logo=telegram&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-64%20pasando-2ea44f)
+![Tests](https://img.shields.io/badge/tests-68%20pasando-2ea44f)
 ![Evals](https://img.shields.io/badge/evals-16%2F16-2ea44f)
 
 </div>
@@ -59,7 +59,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **64 tests** (pytest) | Con un modelo guionado y Synapse/Telegram simulados ([respx](https://lundberg.github.io/respx/)): no gastan cuota y corren en CI. Cubren el bucle del agente, validaciones, confirmaciones, vencimientos, aislamiento entre pacientes, Telegram y el adaptador de Gemini. |
+| **68 tests** (pytest) | Con un modelo guionado y Synapse/Telegram simulados ([respx](https://lundberg.github.io/respx/)): no gastan cuota y corren en CI. Cubren el bucle del agente, validaciones, confirmaciones, vencimientos, concurrencia, aislamiento entre pacientes, Telegram y el adaptador de Gemini. |
 | **16 evaluaciones** con Gemini real | Comprensión de pedidos, uso de herramientas, acciones con confirmación, urgencias, consejo médico, temas ajenos y *prompt injection*. **16/16 aprobadas**, mediana de 2,4 s por caso ([resultados](evals/RESULTADOS.md)). |
 | **Lint** | Ruff (estilo, imports, bugs comunes y async). |
 

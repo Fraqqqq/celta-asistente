@@ -1,6 +1,5 @@
 """Canal de Telegram: traduce updates del Bot API a casos de uso del asistente."""
 
-import asyncio
 import logging
 import secrets
 from collections import OrderedDict
@@ -62,8 +61,6 @@ class ClienteTelegram:
 
 # Telegram reintenta si el webhook tarda: se descartan updates repetidos.
 _procesados: OrderedDict[int, None] = OrderedDict()
-# Un mensaje por chat a la vez, para que dos mensajes seguidos no pisen el historial.
-_candados: dict[int, asyncio.Lock] = {}
 
 
 def _ya_procesado(update_id: int) -> bool:
@@ -249,8 +246,8 @@ async def procesar(tg: ClienteTelegram, update: dict) -> None:
     else:
         return
 
-    candado = _candados.setdefault(chat_id or 0, asyncio.Lock())
-    async with candado:
+    # Un mensaje por chat a la vez, para que dos mensajes seguidos no pisen el historial.
+    async with servicio.candado(f"telegram:{chat_id}"):
         try:
             await manejador
         except SesionVencida:
