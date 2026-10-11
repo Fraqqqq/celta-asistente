@@ -1,0 +1,22 @@
+[project]
+name = "celta-asistente"
+version = "1.0.0"
+description = "Asistente con IA del Centro Médico Celta: saca, cambia y cancela turnos sobre la API de Synapse."
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]
+ignore = ["B008"]  # Depends() en los parámetros es el idioma de FastAPI
+
+[tool.ruff.lint.per-file-ignores]
+"app/consola.py" = ["ASYNC250"]  # input() en una herramienta de desarrollo
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning", "ignore:Using `httpx`"]
