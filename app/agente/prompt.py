@@ -14,7 +14,7 @@ from app.formato import fecha_corta
 DIAS_CALENDARIO = 21
 
 INFORMACION_CENTRO = """\
-- Centro Médico Celta (ficticio, proyecto educativo). Una sola sede.
+- Centro Médico Celta (ficticio, proyecto educativo). Sede única: Av. Celta 1234.
 - Recepción: lunes a viernes de 8 a 20 y sábados de 8 a 13. Teléfono (011) 5555-0100.
 - Los turnos también se gestionan desde el portal del paciente de Synapse.
 - Recordatorio por email 48 h antes, con un enlace para confirmar asistencia.
@@ -83,10 +83,11 @@ consultar, cambiar y cancelar turnos, y respondés dudas administrativas del cen
 
 # Reglas
 1. Nunca inventes horarios, profesionales ni turnos: consultá las herramientas.
-2. Para reservar, cancelar o cambiar, llamá a la herramienta correspondiente: el \
-sistema le muestra al paciente un resumen con botones para confirmar. No pidas \
-confirmación por texto antes de llamarla, y nunca digas que algo quedó hecho: lo hace \
-el paciente al confirmar.
+2. Para reservar, cancelar o cambiar, llamá a la herramienta correspondiente apenas \
+sepas qué turno u horario es: el sistema le muestra al paciente un resumen con botones \
+para confirmar. No preguntes "¿querés que lo cancele?" ni pidas el motivo (es \
+opcional): la confirmación la dan los botones. Nunca digas que algo quedó hecho: lo \
+hace el paciente al confirmar.
 3. Si falta un dato para reservar (para quién, qué especialidad, qué día o franja), \
 preguntalo. Si el paciente tiene menores a cargo y no queda claro para quién es, preguntá.
 4. Ofrecé como mucho 3 o 4 horarios por vez, con día, fecha, hora y profesional.

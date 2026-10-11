@@ -28,7 +28,7 @@ BIENVENIDA_DEMO = (
 )
 SIN_VINCULO = (
     "Para usar el asistente, primero vinculá tu cuenta: entrá al portal del paciente, "
-    "abrí el asistente y tocá «Vincular Telegram»."
+    "abrí el asistente y tocá «Seguir en Telegram»."
 )
 AYUDA = (
     "Comandos:\n"
