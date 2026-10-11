@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 
+import httpx
 from google import genai
 from google.genai import errors, types
 
@@ -185,6 +186,9 @@ class Gemini:
                 resultado = await self._intentar(modelo, sistema, historial, herramientas)
             except TimeoutError:
                 log.warning("%s no respondió en %.0f s; pruebo el siguiente", modelo, self._espera)
+                continue
+            except (httpx.TransportError, errors.UnknownApiResponseError) as e:
+                log.warning("%s falló por red (%s); pruebo el siguiente", modelo, type(e).__name__)
                 continue
             except errors.APIError as e:
                 if e.code == 429:

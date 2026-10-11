@@ -134,9 +134,10 @@ async def chat(
     paciente: Paciente = Depends(paciente_actual),
     sesion: Session = Depends(obtener_sesion),
 ):
-    respuesta = await servicio.atender(
-        sesion, _conversacion(sesion, paciente), paciente.token, datos.mensaje
-    )
+    async with servicio.candado(f"portal:{paciente.usuario_id}"):
+        respuesta = await servicio.atender(
+            sesion, _conversacion(sesion, paciente), paciente.token, datos.mensaje
+        )
     accion = respuesta.accion
     return SalidaChat(
         texto=respuesta.texto,
@@ -152,9 +153,10 @@ async def resolver(
     sesion: Session = Depends(obtener_sesion),
 ):
     try:
-        texto = await servicio.resolver_accion(
-            sesion, _conversacion(sesion, paciente), accion_id, datos.confirmar, paciente.token
-        )
+        async with servicio.candado(f"portal:{paciente.usuario_id}"):
+            texto = await servicio.resolver_accion(
+                sesion, _conversacion(sesion, paciente), accion_id, datos.confirmar, paciente.token
+            )
     except servicio.AccionInvalida as e:
         raise HTTPException(404, str(e)) from e
     return SalidaChat(texto=texto)

@@ -180,3 +180,17 @@ def test_al_arrancar_registra_el_webhook_de_telegram(synapse, monkeypatch):
     datos = json.loads(registro.calls[0].request.content)
     assert datos["url"] == "https://asistente.example.com/api/telegram/webhook"
     assert datos["secret_token"] == "secreto"
+
+
+def test_cuota_global_protege_al_resto_de_los_pacientes(api, modelo, monkeypatch):
+    from app.config import obtener_configuracion
+
+    monkeypatch.setenv("MENSAJES_GLOBALES_POR_MINUTO", "1")
+    obtener_configuracion.cache_clear()
+    modelo(texto("hola"))
+    api.post("/api/chat", json={"mensaje": "hola"}, headers=AUTH)
+    r = api.post("/api/chat", json={"mensaje": "hola de nuevo"}, headers=AUTH)
+    assert "muchas consultas" in r.json()["texto"]
+    # Las urgencias nunca se racionan.
+    r = api.post("/api/chat", json={"mensaje": "no puedo respirar"}, headers=AUTH)
+    assert "107" in r.json()["texto"]

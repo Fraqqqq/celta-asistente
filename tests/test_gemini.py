@@ -67,3 +67,29 @@ def test_lectura_de_respuesta_con_llamada_y_razonamiento():
     assert r.llamadas[0].nombre == "buscar_disponibilidad"
     assert base64.b64decode(r.llamadas[0].firma) == b"sig"
     assert (r.tokens_entrada, r.tokens_salida) == (100, 10)
+
+
+async def test_error_de_red_pasa_al_modelo_siguiente(monkeypatch):
+    import httpx
+
+    from app.llm.gemini import Gemini
+
+    g = Gemini("clave", ["caido", "sano"])
+    usados = []
+
+    async def llamar(modelo, *args):
+        usados.append(modelo)
+        if modelo == "caido":
+            raise httpx.ConnectError("sin red")
+        return types_respuesta(modelo)
+
+    monkeypatch.setattr(g, "_llamar", llamar)
+    r = await g.generar("sistema", [Mensaje("usuario", "hola")], [])
+    assert usados == ["caido", "sano"]
+    assert r.modelo == "sano"
+
+
+def types_respuesta(modelo: str):
+    from app.llm.base import RespuestaModelo
+
+    return RespuestaModelo(texto="hola", llamadas=[], modelo=modelo)

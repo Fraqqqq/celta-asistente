@@ -8,7 +8,16 @@ from collections.abc import Iterator
 from datetime import datetime
 from functools import lru_cache
 
-from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, String, create_engine
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    create_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from app import reloj
@@ -74,6 +83,11 @@ class Intercambio(Base):
     """Métricas de cada mensaje atendido (sin contenido): latencia, tokens y herramientas."""
 
     __tablename__ = "intercambios"
+    # Los límites cuentan intercambios recientes por conversación y en todo el servicio.
+    __table_args__ = (
+        Index("ix_intercambios_conversacion_creado", "conversacion_id", "creado"),
+        Index("ix_intercambios_creado", "creado"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     conversacion_id: Mapped[int] = mapped_column(ForeignKey("conversaciones.id"))
