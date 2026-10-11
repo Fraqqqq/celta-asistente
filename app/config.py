@@ -28,7 +28,11 @@ class Configuracion(BaseSettings):
     # --- Telegram ---
     telegram_bot_token: str = ""
     telegram_bot_usuario: str = "celta_asistente_fraqqqq_bot"
-    telegram_secreto_webhook: str = ""
+    telegram_secreto_webhook: str = ""  # vacío: se genera uno al arrancar
+    # URL pública del servicio. Si está, al arrancar se registra el webhook de Telegram.
+    # Render la expone sola como RENDER_EXTERNAL_URL.
+    url_publica: str = ""
+    render_external_url: str = ""
 
     # --- Asistente ---
     database_url: str = "sqlite:///./asistente.db"
@@ -38,6 +42,11 @@ class Configuracion(BaseSettings):
     horas_contexto: int = 6  # pasado este tiempo sin mensajes, la conversación arranca de cero
     mensajes_por_ventana: int = 20  # límite por conversación...
     minutos_ventana: int = 10  # ...en esta ventana de tiempo
+
+    @property
+    def url_webhook(self) -> str | None:
+        base = self.url_publica or self.render_external_url
+        return f"{base.rstrip('/')}/api/telegram/webhook" if base else None
 
     @property
     def lista_modelos(self) -> list[str]:

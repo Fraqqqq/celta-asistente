@@ -2,6 +2,8 @@
 
 import hmac
 import logging
+import secrets
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
@@ -20,10 +22,40 @@ from app.synapse import ClienteSynapse, ErrorSynapse, SesionVencida
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+log = logging.getLogger(__name__)
+
+# Secreto que Telegram manda en cada llamada al webhook. Si no se configura uno, se genera
+# al arrancar: el webhook se vuelve a registrar en cada inicio con el secreto vigente.
+_secreto_webhook: list[str] = []
+
+
+def secreto_webhook() -> str:
+    if not _secreto_webhook:
+        configurado = obtener_configuracion().telegram_secreto_webhook
+        _secreto_webhook.append(configurado or secrets.token_urlsafe(32))
+    return _secreto_webhook[0]
+
+
+@asynccontextmanager
+async def ciclo_de_vida(_: FastAPI):
+    config = obtener_configuracion()
+    if config.url_webhook and config.telegram_bot_token:
+        respuesta = await _cliente_telegram().llamar(
+            "setWebhook",
+            url=config.url_webhook,
+            secret_token=secreto_webhook(),
+            allowed_updates=["message", "callback_query"],
+            drop_pending_updates=False,
+        )
+        log.info("Webhook de Telegram en %s: %s", config.url_webhook, respuesta.get("ok"))
+    yield
+
+
 app = FastAPI(
     title="Asistente del Centro Médico Celta",
     version="1.0.0",
     description="Agente con IA que gestiona turnos sobre la API de Synapse. Datos ficticios.",
+    lifespan=ciclo_de_vida,
 )
 app.add_middleware(
     CORSMiddleware,
@@ -174,10 +206,7 @@ async def webhook_telegram(
     tareas: BackgroundTasks,
     secreto: str = Header(default="", alias="X-Telegram-Bot-Api-Secret-Token"),
 ):
-    config = obtener_configuracion()
-    if not config.telegram_secreto_webhook or not hmac.compare_digest(
-        secreto, config.telegram_secreto_webhook
-    ):
+    if not hmac.compare_digest(secreto.encode(), secreto_webhook().encode()):
         raise HTTPException(403, "Secreto inválido.")
     # Se responde enseguida y se procesa aparte: si el webhook tarda, Telegram reintenta.
     tareas.add_task(telegram.procesar, _cliente_telegram(), update)

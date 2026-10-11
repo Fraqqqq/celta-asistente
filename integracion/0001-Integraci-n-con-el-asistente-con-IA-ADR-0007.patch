@@ -1,0 +1,730 @@
+From 333a58a5226c0f7cbc1b47707c7f67938631bf73 Mon Sep 17 00:00:00 2001
+From: Franco Albrecht <165222065+Fraqqqq@users.noreply.github.com>
+Date: Sun, 11 Oct 2026 20:44:44 -0300
+Subject: [PATCH] =?UTF-8?q?Integraci=C3=B3n=20con=20el=20asistente=20con?=
+ =?UTF-8?q?=20IA=20(ADR=200007)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- POST /api/integraciones/asistente/token: canje de token con clave de servicio
+- Widget de chat en el portal del paciente (VITE_ASISTENTE_URL)
+- 6 tests nuevos (79 en total)
+
+---
+ README.md                                  |   9 +-
+ backend/app/api/integraciones.py           |  43 +++
+ backend/app/config.py                      |   4 +
+ backend/app/main.py                        |  25 +-
+ backend/tests/test_integraciones.py        |  51 ++++
+ docs/adr/0007-asistente-con-ia.md          |  20 ++
+ docs/adr/README.md                         |   1 +
+ frontend/src/componentes/asistente.tsx     | 335 +++++++++++++++++++++
+ frontend/src/componentes/layout-portal.tsx |   4 +
+ frontend/src/lib/asistente.ts              |  55 ++++
+ render.yaml                                |   6 +
+ 11 files changed, 547 insertions(+), 6 deletions(-)
+ create mode 100644 backend/app/api/integraciones.py
+ create mode 100644 backend/tests/test_integraciones.py
+ create mode 100644 docs/adr/0007-asistente-con-ia.md
+ create mode 100644 frontend/src/componentes/asistente.tsx
+ create mode 100644 frontend/src/lib/asistente.ts
+
+diff --git a/README.md b/README.md
+index bd49388..54e870f 100644
+--- a/README.md
++++ b/README.md
+@@ -13,7 +13,7 @@ Turnos sin superposiciones · historia clínica inalterable con registro de acce
+ ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+ ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+ ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
+-![Tests](https://img.shields.io/badge/tests-73%20pasando-2ea44f)
++![Tests](https://img.shields.io/badge/tests-79%20pasando-2ea44f)
+ 
+ </div>
+ 
+@@ -31,7 +31,7 @@ Un centro médico de una sede, con 12 profesionales y unos 3.000 pacientes, da t
+ |---|---|
+ | **Recepción** | Agenda del día con acreditación de llegada · reserva guiada que solo ofrece horarios válidos · sobreturnos con cupo · bandeja de autorizaciones · caja diaria |
+ | **Médicos** | Sala de espera en tiempo real · historia clínica de **todas** las especialidades · consulta con diagnósticos **CIE-10** y receta · anotaciones (nunca edición) · **acceso de emergencia** justificado |
+-| **Pacientes** | Portal para sacar, cambiar y cancelar turnos · grupo familiar (hijos menores) · su historia clínica completa · recordatorio por email 48 h antes con confirmación en un clic |
++| **Pacientes** | Portal para sacar, cambiar y cancelar turnos · grupo familiar (hijos menores) · su historia clínica completa · recordatorio por email 48 h antes con confirmación en un clic · **asistente con IA** en el portal y en Telegram ([proyecto aparte](https://github.com/Fraqqqq/celta-asistente)) |
+ | **Dirección** | Tablero de ausentismo y ocupación · coberturas por plan · usuarios · **auditoría** inmutable de accesos a historias clínicas |
+ 
+ ## Capturas
+@@ -85,6 +85,7 @@ stateDiagram-v2
+ - **Acceso de emergencia ("break the glass").** Un médico solo ve historias de pacientes con los que tiene relación asistencial. Si no la tiene, puede acceder con una justificación, que queda destacada en la auditoría y vale 12 horas.
+ - **Las reglas viven en los servicios, no en la interfaz.** El frontend ofrece solo horarios libres, pero la validación final la hace el servidor al guardar. Así se resuelve también la concurrencia (dos recepcionistas reservando el mismo horario).
+ - **Errores con la regla incumplida.** Cada rechazo devuelve `{"codigo", "mensaje", "regla": "RN-07"}`, que conecta la interfaz con la documentación.
++- **Un asistente con IA que no tiene más permisos que el paciente.** El [asistente](https://github.com/Fraqqqq/celta-asistente) opera la API con el token del propio paciente. En Telegram lo obtiene con un canje de token autorizado por una clave de servicio, así que Synapse sigue aplicando todas las reglas ([ADR 0007](docs/adr/0007-asistente-con-ia.md)).
+ - **Seguridad del registro.** Si un DNI ya existe, el portal no vincula la cuenta: cualquiera que conociera un DNI ajeno podría ver esa historia clínica. Se valida la identidad en la recepción.
+ 
+ ## Stack
+@@ -94,7 +95,7 @@ stateDiagram-v2
+ | Backend | Python 3.12 · FastAPI · SQLAlchemy 2 · Pydantic 2 · Alembic · APScheduler · bcrypt · JWT |
+ | Base de datos | PostgreSQL 16 (SQLite para desarrollo rápido y tests) |
+ | Frontend | React 19 · TypeScript · Vite · Tailwind CSS 4 · TanStack Query · React Router |
+-| Calidad | pytest (73 tests sobre SQLite y PostgreSQL) · Ruff · ESLint · GitHub Actions |
++| Calidad | pytest (79 tests sobre SQLite y PostgreSQL) · Ruff · ESLint · GitHub Actions |
+ | Infraestructura | Docker · docker compose · Render + Neon |
+ 
+ ## Cómo correrlo
+@@ -123,7 +124,7 @@ npm run dev                                          # http://localhost:5173
+ 
+ ### Tests
+ ```bash
+-cd backend && pytest                                 # 73 tests
++cd backend && pytest                                 # 79 tests
+ cd frontend && npm run typecheck && npm run lint
+ ```
+ 
+diff --git a/backend/app/api/integraciones.py b/backend/app/api/integraciones.py
+new file mode 100644
+index 0000000..4dac78f
+--- /dev/null
++++ b/backend/app/api/integraciones.py
+@@ -0,0 +1,43 @@
++"""Integraciones con otros sistemas del centro."""
++
++import hmac
++
++from fastapi import APIRouter, Header
++from pydantic import BaseModel
++from sqlalchemy.orm import Session
++
++from app.config import obtener_configuracion
++from app.dependencias import Sesion
++from app.errores import NoAutenticado, NoEncontrado
++from app.esquemas import SesionSalida
++from app.modelos import Usuario
++from app.modelos.enums import Rol
++from app.seguridad import crear_token
++
++router = APIRouter(prefix="/integraciones", tags=["Integraciones"])
++
++
++class IntercambioEntrada(BaseModel):
++    usuario_id: int
++
++
++@router.post(
++    "/asistente/token",
++    response_model=SesionSalida,
++    summary="Token de un paciente para el asistente con IA (ADR 0007)",
++)
++def token_para_asistente(
++    datos: IntercambioEntrada,
++    clave: str = Header(default="", alias="X-Clave-Servicio"),
++    sesion: Session = Sesion,
++):
++    """El asistente canjea su clave de servicio por un token del paciente que vinculó su
++    cuenta de Telegram. El token tiene los mismos permisos que la sesión del portal: el
++    asistente no puede hacer nada que el paciente no pueda hacer."""
++    esperada = obtener_configuracion().clave_servicio_asistente
++    if not esperada or not hmac.compare_digest(clave.encode(), esperada.encode()):
++        raise NoAutenticado("Clave de servicio inválida.")
++    usuario = sesion.get(Usuario, datos.usuario_id)
++    if usuario is None or not usuario.activo or usuario.rol != Rol.PACIENTE:
++        raise NoEncontrado("No hay un paciente activo con ese usuario.")
++    return SesionSalida(token=crear_token(usuario.id, usuario.rol), usuario=usuario)
+diff --git a/backend/app/config.py b/backend/app/config.py
+index 476a092..e4971a4 100644
+--- a/backend/app/config.py
++++ b/backend/app/config.py
+@@ -24,6 +24,10 @@ class Configuracion(BaseSettings):
+     tareas_activas: bool = True
+     demo_reinicio_diario: bool = False  # solo en la demo pública
+ 
++    # Asistente con IA (Telegram): canjea esta clave por el token de un paciente vinculado.
++    # Vacía, la integración queda desactivada. Ver docs/adr/0007-asistente-con-ia.md.
++    clave_servicio_asistente: str = ""
++
+     # Reglas de negocio parametrizables
+     anticipacion_maxima_dias: int = 60  # RN-04
+     horas_minimas_cancelacion_portal: int = 24  # RN-06
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 319139c..36f1701 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -8,7 +8,17 @@ from fastapi.exceptions import RequestValidationError
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import JSONResponse
+ 
+-from app.api import admin, auth, catalogos, historia_clinica, pacientes, portal, recepcion, turnos
++from app.api import (
++    admin,
++    auth,
++    catalogos,
++    historia_clinica,
++    integraciones,
++    pacientes,
++    portal,
++    recepcion,
++    turnos,
++)
+ from app.config import obtener_configuracion
+ from app.errores import ErrorDominio
+ 
+@@ -113,7 +123,18 @@ def crear_app() -> FastAPI:
+             },
+         )
+ 
+-    for modulo in (auth, catalogos, pacientes, turnos, portal, recepcion, historia_clinica, admin):
++    modulos = (
++        auth,
++        catalogos,
++        pacientes,
++        turnos,
++        portal,
++        recepcion,
++        historia_clinica,
++        admin,
++        integraciones,
++    )
++    for modulo in modulos:
+         app.include_router(modulo.router, prefix="/api")
+     app.include_router(turnos.publico, prefix="/api")
+ 
+diff --git a/backend/tests/test_integraciones.py b/backend/tests/test_integraciones.py
+new file mode 100644
+index 0000000..fb1a541
+--- /dev/null
++++ b/backend/tests/test_integraciones.py
+@@ -0,0 +1,51 @@
++"""Canje de token para el asistente con IA (ADR 0007)."""
++
++import pytest
++
++from app.config import obtener_configuracion
++from tests import test_api
++
++cliente = test_api.cliente  # misma fixture de la API
++
++CLAVE = "clave-de-servicio-de-prueba"
++
++
++@pytest.fixture(autouse=True)
++def clave_configurada(monkeypatch):
++    monkeypatch.setattr(obtener_configuracion(), "clave_servicio_asistente", CLAVE)
++
++
++def canjear(cliente, usuario_id: int, clave: str = CLAVE):
++    return cliente.post(
++        "/api/integraciones/asistente/token",
++        json={"usuario_id": usuario_id},
++        headers={"X-Clave-Servicio": clave},
++    )
++
++
++def test_canje_devuelve_un_token_del_paciente(cliente, esc):
++    r = canjear(cliente, esc.u_ana.id)
++    assert r.status_code == 200
++    token = r.json()["token"]
++    turnos = cliente.get("/api/portal/turnos", headers={"Authorization": f"Bearer {token}"})
++    assert turnos.status_code == 200
++
++
++def test_el_token_canjeado_no_tiene_mas_permisos_que_el_paciente(cliente, esc):
++    token = canjear(cliente, esc.u_ana.id).json()["token"]
++    r = cliente.get("/api/pacientes", headers={"Authorization": f"Bearer {token}"})
++    assert r.status_code == 403
++
++
++@pytest.mark.parametrize("clave", ["", "otra-clave"])
++def test_clave_invalida(cliente, esc, clave):
++    assert canjear(cliente, esc.u_ana.id, clave).status_code == 401
++
++
++def test_solo_para_pacientes(cliente, esc):
++    assert canjear(cliente, esc.u_recepcion.id).status_code == 404
++
++
++def test_desactivado_sin_clave_configurada(cliente, esc, monkeypatch):
++    monkeypatch.setattr(obtener_configuracion(), "clave_servicio_asistente", "")
++    assert canjear(cliente, esc.u_ana.id, "").status_code == 401
+diff --git a/docs/adr/0007-asistente-con-ia.md b/docs/adr/0007-asistente-con-ia.md
+new file mode 100644
+index 0000000..bc8214d
+--- /dev/null
++++ b/docs/adr/0007-asistente-con-ia.md
+@@ -0,0 +1,20 @@
++# ADR 0007 · Integración con el asistente con IA
++
++**Estado:** aceptada · 11/10/2026
++
++## Contexto
++El [asistente con IA del Centro Médico Celta](https://github.com/Fraqqqq/celta-asistente) es un proyecto aparte que saca, cambia y cancela turnos conversando con el paciente por Telegram o desde un chat en el portal. Necesita operar Synapse **en nombre del paciente**, sin acceder a la base y sin tener más permisos que él.
++
++- En el **portal** es simple: el paciente ya inició sesión y el widget le pasa al asistente el mismo token.
++- En **Telegram** no hay sesión. Pedirle email y contraseña en el chat está descartado: la contraseña quedaría en el historial de Telegram y en los logs.
++
++## Decisión
++1. **Vinculación desde el portal.** El paciente toca "Seguir en Telegram" en el widget, y el asistente genera un enlace `t.me/<bot>?start=<código>` de un solo uso que vence en 10 minutos. Así queda probado que el chat pertenece a quien inició sesión.
++2. **Canje de token con clave de servicio.** El asistente llama a `POST /api/integraciones/asistente/token` con el header `X-Clave-Servicio` y el `usuario_id` vinculado, y Synapse devuelve un JWT común de ese paciente. Es el mismo patrón que el *token exchange* de OAuth (RFC 8693), en versión mínima.
++3. El endpoint solo emite tokens para **usuarios con rol paciente y activos**. Si `CLAVE_SERVICIO_ASISTENTE` está vacía, la integración queda apagada.
++
++## Consecuencias
++- ✅ Todas las reglas de negocio y la autorización siguen en Synapse. Si el modelo de lenguaje "alucina" un `paciente_id` ajeno, Synapse lo rechaza (RN-22), igual que si lo intentara el portal.
++- ✅ No hace falta modificar el modelo de datos: los vínculos chat ↔ usuario viven en la base del asistente.
++- ⚠️ La clave de servicio es un secreto de alto valor, porque permite actuar como cualquier paciente. Se guarda solo en las variables de entorno de los dos servicios, se compara en tiempo constante y se puede rotar cambiándola en ambos.
++- ⚠️ Los turnos que reserva el asistente quedan con canal `PORTAL`. Si hiciera falta medir ese canal por separado, se agregaría `ASISTENTE` al enum `Canal` con su migración.
+diff --git a/docs/adr/README.md b/docs/adr/README.md
+index 1ab0ca9..04a5472 100644
+--- a/docs/adr/README.md
++++ b/docs/adr/README.md
+@@ -10,3 +10,4 @@ Cada ADR documenta una decisión importante: el contexto, lo que se decidió y s
+ | [0004](0004-zona-horaria.md) | Fechas en hora local de Argentina sin zona | Aceptada |
+ | [0005](0005-codigo-en-espanol.md) | Código, interfaz y documentación en español | Aceptada |
+ | [0006](0006-graficos-propios.md) | Gráficos en SVG propio en lugar de una librería | Aceptada |
++| [0007](0007-asistente-con-ia.md) | Integración con el asistente con IA | Aceptada |
+diff --git a/frontend/src/componentes/asistente.tsx b/frontend/src/componentes/asistente.tsx
+new file mode 100644
+index 0000000..795d128
+--- /dev/null
++++ b/frontend/src/componentes/asistente.tsx
+@@ -0,0 +1,335 @@
++import { useQueryClient } from "@tanstack/react-query";
++import clsx from "clsx";
++import { MessageCircle, RotateCcw, Send, SendHorizontal, X } from "lucide-react";
++import { useEffect, useId, useRef, useState, type FormEvent } from "react";
++import { asistente, type AccionPropuesta } from "@/lib/asistente";
++import { Boton, BotonIcono } from "@/ui/boton";
++import { Isotipo } from "./marca";
++
++type EstadoAccion = "pendiente" | "resolviendo" | "confirmada" | "descartada";
++
++interface Burbuja {
++  id: number;
++  rol: "usuario" | "modelo";
++  texto: string;
++  accion?: AccionPropuesta & { estado: EstadoAccion };
++}
++
++const SUGERENCIAS = [
++  "Quiero sacar un turno",
++  "¿Qué turnos tengo?",
++  "Necesito cambiar un turno",
++  "¿Cuánto me sale una consulta?",
++];
++
++let contador = 0;
++const nueva = (b: Omit<Burbuja, "id">): Burbuja => ({ ...b, id: ++contador });
++
++/**
++ * Chat con el asistente de IA, flotante sobre el portal del paciente.
++ * Las reservas, cambios y cancelaciones se proponen con un resumen y solo se ejecutan
++ * si el paciente toca "Confirmar".
++ */
++export function Asistente() {
++  const [abierto, setAbierto] = useState(false);
++  const [burbujas, setBurbujas] = useState<Burbuja[]>([]);
++  const [cargado, setCargado] = useState(false);
++  const [escribiendo, setEscribiendo] = useState(false);
++  const [entrada, setEntrada] = useState("");
++  const [error, setError] = useState<string | null>(null);
++  const idTitulo = useId();
++  const idPanel = useId();
++  const refBoton = useRef<HTMLButtonElement>(null);
++  const refEntrada = useRef<HTMLInputElement>(null);
++  const refLista = useRef<HTMLDivElement>(null);
++  const cliente = useQueryClient();
++
++  // Al abrir por primera vez se recupera la conversación guardada.
++  useEffect(() => {
++    if (!abierto || cargado) return;
++    asistente
++      .historial()
++      .then((h) => setBurbujas(h.map((m) => nueva(m))))
++      .catch((e: Error) => setError(e.message))
++      .finally(() => setCargado(true));
++  }, [abierto, cargado]);
++
++  useEffect(() => {
++    if (abierto) refEntrada.current?.focus();
++  }, [abierto]);
++
++  useEffect(() => {
++    refLista.current?.scrollTo({ top: refLista.current.scrollHeight, behavior: "smooth" });
++  }, [burbujas, escribiendo]);
++
++  useEffect(() => {
++    if (!abierto) return;
++    const escape = (e: KeyboardEvent) => {
++      if (e.key !== "Escape") return;
++      setAbierto(false);
++      refBoton.current?.focus();
++    };
++    document.addEventListener("keydown", escape);
++    return () => document.removeEventListener("keydown", escape);
++  }, [abierto]);
++
++  function cerrar() {
++    setAbierto(false);
++    refBoton.current?.focus();
++  }
++
++  async function enviar(texto: string) {
++    const limpio = texto.trim();
++    if (!limpio || escribiendo) return;
++    setEntrada("");
++    setError(null);
++    setBurbujas((b) => [...b, nueva({ rol: "usuario", texto: limpio })]);
++    setEscribiendo(true);
++    try {
++      const r = await asistente.enviar(limpio);
++      setBurbujas((b) => [
++        ...b,
++        nueva({
++          rol: "modelo",
++          texto: r.texto,
++          accion: r.accion ? { ...r.accion, estado: "pendiente" } : undefined,
++        }),
++      ]);
++    } catch (e) {
++      setError((e as Error).message);
++    } finally {
++      setEscribiendo(false);
++      refEntrada.current?.focus();
++    }
++  }
++
++  async function resolver(burbuja: Burbuja, confirmar: boolean) {
++    if (!burbuja.accion) return;
++    const marcar = (estado: EstadoAccion) =>
++      setBurbujas((bs) =>
++        bs.map((b) => (b.id === burbuja.id && b.accion ? { ...b, accion: { ...b.accion, estado } } : b)),
++      );
++    marcar("resolviendo");
++    setError(null);
++    try {
++      const r = await asistente.resolver(burbuja.accion.id, confirmar);
++      marcar(confirmar ? "confirmada" : "descartada");
++      setBurbujas((b) => [...b, nueva({ rol: "modelo", texto: r.texto })]);
++      // Los turnos cambiaron: se refrescan las pantallas del portal.
++      if (confirmar) await cliente.invalidateQueries();
++    } catch (e) {
++      marcar("pendiente");
++      setError((e as Error).message);
++    }
++  }
++
++  async function reiniciar() {
++    await asistente.reiniciar().catch(() => undefined);
++    setBurbujas([]);
++    setError(null);
++    refEntrada.current?.focus();
++  }
++
++  async function vincularTelegram() {
++    try {
++      const { enlace } = await asistente.vincularTelegram();
++      window.open(enlace, "_blank", "noopener,noreferrer");
++    } catch (e) {
++      setError((e as Error).message);
++    }
++  }
++
++  function alEnviar(e: FormEvent) {
++    e.preventDefault();
++    void enviar(entrada);
++  }
++
++  return (
++    <>
++      <button
++        ref={refBoton}
++        type="button"
++        onClick={() => (abierto ? cerrar() : setAbierto(true))}
++        aria-expanded={abierto}
++        aria-controls={idPanel}
++        className={clsx(
++          "fixed right-4 bottom-20 z-40 inline-flex h-12 items-center gap-2 rounded-full pr-5 pl-4 text-sm font-medium shadow-flotante transition-all sm:right-6 sm:bottom-6",
++          "bg-marca-700 text-white hover:bg-marca-800 active:scale-[0.98] dark:bg-marca-400 dark:text-marca-950 dark:hover:bg-marca-300",
++          abierto && "max-sm:hidden",
++        )}
++      >
++        {abierto ? <X className="size-5" aria-hidden /> : <MessageCircle className="size-5" aria-hidden />}
++        {abierto ? "Cerrar asistente" : "Asistente"}
++      </button>
++
++      {abierto && (
++        <section
++          id={idPanel}
++          role="dialog"
++          aria-modal="false"
++          aria-labelledby={idTitulo}
++          className={clsx(
++            "animate-aparecer fixed z-50 flex flex-col overflow-hidden border border-borde bg-superficie text-texto shadow-flotante",
++            "inset-x-0 bottom-0 h-[88dvh] rounded-t-2xl",
++            "sm:inset-x-auto sm:right-6 sm:bottom-22 sm:h-[min(640px,calc(100dvh-8rem))] sm:w-[400px] sm:rounded-2xl",
++          )}
++        >
++          <header className="flex items-center gap-3 border-b border-borde px-4 py-3">
++            <Isotipo className="size-8 shrink-0" />
++            <div className="min-w-0 flex-1">
++              <h2 id={idTitulo} className="text-[15px] font-semibold tracking-tight">
++                Asistente del Celta
++              </h2>
++              <p className="text-[11.5px] text-texto-3">
++                Con IA · puede equivocarse, revisá antes de confirmar
++              </p>
++            </div>
++            <BotonIcono etiqueta="Seguir en Telegram" onClick={vincularTelegram}>
++              <Send className="size-4" aria-hidden />
++            </BotonIcono>
++            <BotonIcono etiqueta="Nueva conversación" onClick={reiniciar}>
++              <RotateCcw className="size-4" aria-hidden />
++            </BotonIcono>
++            <BotonIcono etiqueta="Cerrar" onClick={cerrar}>
++              <X className="size-4" aria-hidden />
++            </BotonIcono>
++          </header>
++
++          <div
++            ref={refLista}
++            role="log"
++            aria-live="polite"
++            aria-label="Conversación con el asistente"
++            className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
++          >
++            {cargado && burbujas.length === 0 && (
++              <div className="space-y-3 pt-2">
++                <p className="text-sm text-texto-2">
++                  ¡Hola! Puedo sacarte un turno, mostrarte los que tenés, cambiarlos o cancelarlos. Escribime
++                  como le escribirías a la recepción.
++                </p>
++                <div className="flex flex-wrap gap-2">
++                  {SUGERENCIAS.map((s) => (
++                    <button
++                      key={s}
++                      type="button"
++                      onClick={() => enviar(s)}
++                      className="rounded-full border border-borde px-3 py-1.5 text-[13px] text-texto-2 transition-colors hover:border-acento hover:text-acento-texto"
++                    >
++                      {s}
++                    </button>
++                  ))}
++                </div>
++              </div>
++            )}
++
++            {burbujas.map((b) => (
++              <div key={b.id} className={clsx("flex", b.rol === "usuario" ? "justify-end" : "justify-start")}>
++                <div className="max-w-[85%] space-y-2">
++                  <p
++                    className={clsx(
++                      "rounded-2xl px-3.5 py-2 text-sm whitespace-pre-line",
++                      b.rol === "usuario"
++                        ? "rounded-br-md bg-marca-700 text-white dark:bg-marca-400 dark:text-marca-950"
++                        : "rounded-bl-md bg-superficie-2 text-texto",
++                    )}
++                  >
++                    <span className="sr-only">{b.rol === "usuario" ? "Vos: " : "Asistente: "}</span>
++                    {b.texto}
++                  </p>
++                  {b.accion && <TarjetaAccion burbuja={b} onResolver={resolver} />}
++                </div>
++              </div>
++            ))}
++
++            {escribiendo && (
++              <div className="flex justify-start" aria-label="El asistente está escribiendo">
++                <span className="flex gap-1 rounded-2xl rounded-bl-md bg-superficie-2 px-4 py-3">
++                  {[0, 1, 2].map((i) => (
++                    <span
++                      key={i}
++                      className="size-1.5 animate-pulse rounded-full bg-texto-3"
++                      style={{ animationDelay: `${i * 150}ms` }}
++                    />
++                  ))}
++                </span>
++              </div>
++            )}
++
++            {error && (
++              <p
++                role="alert"
++                className="rounded-xl bg-red-50 px-3 py-2 text-[13px] text-red-700 dark:bg-red-950/50 dark:text-red-300"
++              >
++                {error}
++              </p>
++            )}
++          </div>
++
++          <form onSubmit={alEnviar} className="flex items-center gap-2 border-t border-borde p-3">
++            <label htmlFor={`${idPanel}-entrada`} className="sr-only">
++              Mensaje para el asistente
++            </label>
++            <input
++              id={`${idPanel}-entrada`}
++              ref={refEntrada}
++              value={entrada}
++              onChange={(e) => setEntrada(e.target.value)}
++              maxLength={1000}
++              autoComplete="off"
++              placeholder="Escribí tu consulta…"
++              className="h-10 min-w-0 flex-1 rounded-xl border border-borde bg-superficie px-3.5 text-sm placeholder:text-texto-3 focus:border-acento focus:ring-4 focus:ring-acento/15 focus:outline-none"
++            />
++            <Boton
++              type="submit"
++              aria-label="Enviar"
++              disabled={!entrada.trim() || escribiendo}
++              className="px-3"
++            >
++              <SendHorizontal className="size-4" aria-hidden />
++            </Boton>
++          </form>
++        </section>
++      )}
++    </>
++  );
++}
++
++function TarjetaAccion({
++  burbuja,
++  onResolver,
++}: {
++  burbuja: Burbuja;
++  onResolver: (b: Burbuja, confirmar: boolean) => void;
++}) {
++  const accion = burbuja.accion!;
++  const resuelta = accion.estado === "confirmada" || accion.estado === "descartada";
++  return (
++    <div className="rounded-2xl border border-borde bg-superficie p-3.5 shadow-suave">
++      <p className="text-[13px] leading-relaxed text-texto">{accion.resumen}</p>
++      {resuelta ? (
++        <p className="mt-2 text-[12.5px] font-medium text-texto-3">
++          {accion.estado === "confirmada" ? "✓ Confirmado" : "Descartado"}
++        </p>
++      ) : (
++        <div className="mt-3 flex gap-2">
++          <Boton
++            tamano="sm"
++            cargando={accion.estado === "resolviendo"}
++            onClick={() => onResolver(burbuja, true)}
++          >
++            Confirmar
++          </Boton>
++          <Boton
++            tamano="sm"
++            variante="secundario"
++            disabled={accion.estado === "resolviendo"}
++            onClick={() => onResolver(burbuja, false)}
++          >
++            Descartar
++          </Boton>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/frontend/src/componentes/layout-portal.tsx b/frontend/src/componentes/layout-portal.tsx
+index 20c1851..f9da953 100644
+--- a/frontend/src/componentes/layout-portal.tsx
++++ b/frontend/src/componentes/layout-portal.tsx
+@@ -1,6 +1,8 @@
+ import clsx from "clsx";
+ import { CalendarDays, CalendarPlus, HeartPulse, Home, Users } from "lucide-react";
+ import { NavLink, Outlet } from "react-router";
++import { asistenteDisponible } from "@/lib/asistente";
++import { Asistente } from "./asistente";
+ import { Logo } from "./marca";
+ import { MenuUsuario } from "./menu-usuario";
+ 
+@@ -43,6 +45,8 @@ export function LayoutPortal() {
+         <Outlet />
+       </main>
+ 
++      {asistenteDisponible && <Asistente />}
++
+       {/* Barra inferior en celulares */}
+       <nav
+         aria-label="Portal"
+diff --git a/frontend/src/lib/asistente.ts b/frontend/src/lib/asistente.ts
+new file mode 100644
+index 0000000..a1af8b3
+--- /dev/null
++++ b/frontend/src/lib/asistente.ts
+@@ -0,0 +1,55 @@
++// Cliente del asistente con IA (proyecto aparte: celta-asistente).
++// El asistente recibe el mismo token del portal y opera Synapse en nombre del paciente.
++
++import { token } from "./api";
++
++const BASE = import.meta.env.VITE_ASISTENTE_URL as string | undefined;
++
++/** El widget solo aparece si el despliegue configura la URL del asistente. */
++export const asistenteDisponible = Boolean(BASE);
++
++export interface AccionPropuesta {
++  id: string;
++  resumen: string;
++}
++
++export interface RespuestaAsistente {
++  texto: string;
++  accion: AccionPropuesta | null;
++}
++
++export interface MensajeAsistente {
++  rol: "usuario" | "modelo";
++  texto: string;
++}
++
++async function pedir<T>(metodo: "GET" | "POST", ruta: string, cuerpo?: unknown): Promise<T> {
++  let respuesta: Response;
++  try {
++    respuesta = await fetch(`${BASE}/api${ruta}`, {
++      method: metodo,
++      headers: {
++        Authorization: `Bearer ${token.leer() ?? ""}`,
++        ...(cuerpo === undefined ? {} : { "Content-Type": "application/json" }),
++      },
++      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
++    });
++  } catch {
++    throw new Error("No pudimos conectar con el asistente. Probá de nuevo en un rato.");
++  }
++  if (respuesta.status === 204) return undefined as T;
++  const datos = await respuesta.json().catch(() => null);
++  if (!respuesta.ok) {
++    throw new Error(datos?.mensaje ?? datos?.detail ?? "El asistente no pudo responder.");
++  }
++  return datos as T;
++}
++
++export const asistente = {
++  historial: () => pedir<MensajeAsistente[]>("GET", "/chat/historial"),
++  enviar: (mensaje: string) => pedir<RespuestaAsistente>("POST", "/chat", { mensaje }),
++  resolver: (id: string, confirmar: boolean) =>
++    pedir<RespuestaAsistente>("POST", `/chat/acciones/${id}`, { confirmar }),
++  reiniciar: () => pedir<void>("POST", "/chat/reiniciar"),
++  vincularTelegram: () => pedir<{ enlace: string; minutos_vigencia: number }>("POST", "/vinculos/telegram"),
++};
+diff --git a/render.yaml b/render.yaml
+index 088b487..a0d6e36 100644
+--- a/render.yaml
++++ b/render.yaml
+@@ -25,6 +25,9 @@ services:
+         sync: false
+       - key: DEMO_REINICIO_DIARIO
+         value: "true"
++      # Asistente con IA (ADR 0007): la misma clave se carga en el servicio del asistente.
++      - key: CLAVE_SERVICIO_ASISTENTE
++        sync: false
+ 
+   - type: web
+     name: synapse-web
+@@ -35,6 +38,9 @@ services:
+     envVars:
+       - key: VITE_API_URL
+         sync: false
++      # URL del asistente con IA; si queda vacía, el portal no muestra el chat.
++      - key: VITE_ASISTENTE_URL
++        sync: false
+     routes:
+       - type: rewrite
+         source: /*
+-- 
+2.51.2.windows.1
+

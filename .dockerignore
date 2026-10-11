@@ -1,0 +1,11 @@
+.venv
+.env
+*.db
+tests
+evals
+docs
+integracion
+.github
+__pycache__
+.pytest_cache
+.ruff_cache

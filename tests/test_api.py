@@ -1,5 +1,6 @@
 """El chat del portal de punta a punta: API → agente → Synapse (simulado)."""
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -163,3 +164,19 @@ def test_webhook_exige_el_secreto(api):
         headers={"X-Telegram-Bot-Api-Secret-Token": "secreto"},
     )
     assert r.status_code == 200
+
+
+def test_al_arrancar_registra_el_webhook_de_telegram(synapse, monkeypatch):
+    import respx
+
+    from app.config import obtener_configuracion
+
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://asistente.example.com")
+    obtener_configuracion.cache_clear()
+    with respx.mock(base_url="https://api.telegram.org/bot123:abc") as tg:
+        registro = tg.post("/setWebhook").respond(200, json={"ok": True})
+        with TestClient(app):
+            pass
+    datos = json.loads(registro.calls[0].request.content)
+    assert datos["url"] == "https://asistente.example.com/api/telegram/webhook"
+    assert datos["secret_token"] == "secreto"
