@@ -1,0 +1,26 @@
+# Blueprint de Render para el asistente (plan gratuito).
+# Los secretos se cargan a mano en el panel: GEMINI_API_KEY y TELEGRAM_BOT_TOKEN.
+services:
+  - type: web
+    name: celta-asistente
+    runtime: docker
+    region: ohio  # junto a la API de Synapse
+    plan: free
+    healthCheckPath: /api/salud
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: SYNAPSE_URL
+        value: https://synapse-api-3mb9.onrender.com/api
+      # Demo pública: el bot opera como la paciente ficticia de la demo de Synapse.
+      # Para producción: "intercambio" + SYNAPSE_CLAVE_SERVICIO (ver docs/adr/0003).
+      - key: CREDENCIALES_MODO
+        value: demo
+      - key: CORS_ORIGENES
+        value: https://synapse-web-9qx2.onrender.com
+      # En la demo la base es SQLite en disco efímero: se pierde al reiniciar, y en modo
+      # demo no importa (no hay vínculos que conservar). En producción: PostgreSQL.
+      - key: DATABASE_URL
+        value: sqlite:////tmp/asistente.db

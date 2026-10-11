@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from app import config, credenciales, db, reloj, servicio
+from app import config, credenciales, db, main, reloj, servicio
 from app import synapse as synapse_mod
 from app.agente import contexto
 from app.canales import telegram
@@ -146,6 +146,8 @@ def entorno(tmp_path, monkeypatch):
     synapse_mod._clientes.clear()
     credenciales._usuario_demo.clear()
     telegram._procesados.clear()
+    main._secreto_webhook.clear()
+    main._tg.clear()
     yield
     servicio.usar_modelo(None)
 
