@@ -1,4 +1,4 @@
-From 333a58a5226c0f7cbc1b47707c7f67938631bf73 Mon Sep 17 00:00:00 2001
+From ca65941dc83eb7d10f1997a7db3c0bce12b324f5 Mon Sep 17 00:00:00 2001
 From: Franco Albrecht <francoalbrecht02@gmail.com>
 Date: Sun, 11 Oct 2026 20:44:44 -0300
 Subject: [PATCH] =?UTF-8?q?Integraci=C3=B3n=20con=20el=20asistente=20con?=
@@ -20,11 +20,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  backend/tests/test_integraciones.py        |  51 ++++
  docs/adr/0007-asistente-con-ia.md          |  20 ++
  docs/adr/README.md                         |   1 +
- frontend/src/componentes/asistente.tsx     | 335 +++++++++++++++++++++
+ frontend/src/componentes/asistente.tsx     | 336 +++++++++++++++++++++
  frontend/src/componentes/layout-portal.tsx |   4 +
  frontend/src/lib/asistente.ts              |  55 ++++
  render.yaml                                |   6 +
- 11 files changed, 547 insertions(+), 6 deletions(-)
+ 11 files changed, 548 insertions(+), 6 deletions(-)
  create mode 100644 backend/app/api/integraciones.py
  create mode 100644 backend/tests/test_integraciones.py
  create mode 100644 docs/adr/0007-asistente-con-ia.md
@@ -280,10 +280,10 @@ index 1ab0ca9..04a5472 100644
 +| [0007](0007-asistente-con-ia.md) | Integración con el asistente con IA | Aceptada |
 diff --git a/frontend/src/componentes/asistente.tsx b/frontend/src/componentes/asistente.tsx
 new file mode 100644
-index 0000000..795d128
+index 0000000..4fdf454
 --- /dev/null
 +++ b/frontend/src/componentes/asistente.tsx
-@@ -0,0 +1,335 @@
+@@ -0,0 +1,336 @@
 +import { useQueryClient } from "@tanstack/react-query";
 +import clsx from "clsx";
 +import { MessageCircle, RotateCcw, Send, SendHorizontal, X } from "lucide-react";
@@ -402,7 +402,7 @@ index 0000000..795d128
 +      marcar(confirmar ? "confirmada" : "descartada");
 +      setBurbujas((b) => [...b, nueva({ rol: "modelo", texto: r.texto })]);
 +      // Los turnos cambiaron: se refrescan las pantallas del portal.
-+      if (confirmar) await cliente.invalidateQueries();
++      if (confirmar) await cliente.invalidateQueries({ queryKey: ["portal"] });
 +    } catch (e) {
 +      marcar("pendiente");
 +      setError((e as Error).message);
@@ -529,7 +529,8 @@ index 0000000..795d128
 +            ))}
 +
 +            {escribiendo && (
-+              <div className="flex justify-start" aria-label="El asistente está escribiendo">
++              <div className="flex justify-start" role="status">
++                <span className="sr-only">El asistente está escribiendo…</span>
 +                <span className="flex gap-1 rounded-2xl rounded-bl-md bg-superficie-2 px-4 py-3">
 +                  {[0, 1, 2].map((i) => (
 +                    <span
