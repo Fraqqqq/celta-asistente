@@ -6,6 +6,7 @@ from collections import OrderedDict
 from datetime import timedelta
 
 import httpx
+from sqlalchemy import update
 
 from app import credenciales, reloj, servicio
 from app.config import obtener_configuracion
@@ -121,13 +122,23 @@ def _vincular(chat_id: int, usuario_id: int) -> None:
 
 def _canjear_codigo(codigo: str, chat_id: int) -> bool:
     with nueva_sesion() as sesion:
-        registro = sesion.get(CodigoVinculo, codigo)
-        if registro is None or registro.usado or registro.vence < reloj.ahora():
-            return False
-        registro.usado = True
+        # Se marca como usado en una sola sentencia: aunque haya varias instancias del
+        # servicio, un código no puede vincular dos chats.
+        usuario_id = sesion.scalar(
+            update(CodigoVinculo)
+            .where(
+                CodigoVinculo.codigo == codigo,
+                CodigoVinculo.usado.is_(False),
+                CodigoVinculo.vence >= reloj.ahora(),
+            )
+            .values(usado=True)
+            .returning(CodigoVinculo.usuario_id)
+        )
         sesion.commit()
-        _vincular(chat_id, registro.usuario_id)
-        return True
+    if usuario_id is None:
+        return False
+    _vincular(chat_id, usuario_id)
+    return True
 
 
 async def _comando(tg: ClienteTelegram, chat_id: int, texto: str) -> bool:

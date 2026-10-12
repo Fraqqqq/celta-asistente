@@ -4,7 +4,7 @@
 
 **Un agente con IA que saca, cambia y cancela turnos médicos conversando, sobre la API real de [Synapse](https://github.com/Fraqqqq/synapse).**
 
-[Probalo en Telegram](https://t.me/celta_asistente_fraqqqq_bot) · [Decisiones de diseño](docs/adr/) · [Evaluaciones](evals/RESULTADOS.md)
+[Probalo en Telegram](https://t.me/celta_asistente_fraqqqq_bot) · [Decisiones de diseño](docs/adr/) · [Evaluaciones](evals/RESULTADOS.md) · [Auditoría](docs/auditoria.md)
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.143-009688?logo=fastapi&logoColor=white)
