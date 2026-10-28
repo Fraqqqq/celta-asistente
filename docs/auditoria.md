@@ -60,7 +60,7 @@ Si Synapse rechaza el token antes de ejecutar, la acción vuelve a `pendiente` p
 **Arreglo:** un tope global por minuto y por día, configurable y por debajo de la cuota gratuita, que se aplica **después** del detector de urgencias (una urgencia nunca se raciona):
 
 ```python
-if _excede_cuota_global(sesion):        # 10 por minuto, 600 por día
+if _excede_cuota_global(sesion):  # 10 por minuto, 600 por día
     registro.resultado = "cuota_global"
     return Respuesta(MENSAJE_SATURADO)
 ```
@@ -88,7 +88,9 @@ def purgar(sesion: Session, dias: int = 30) -> int:
     limite = reloj.ahora() - timedelta(days=dias)
     viejas = select(Conversacion.id).where(Conversacion.actualizada < limite)
     sesion.execute(delete(AccionPendiente).where(AccionPendiente.conversacion_id.in_(viejas)))
-    sesion.execute(update(Conversacion).where(Conversacion.actualizada < limite).values(historial=[]))
+    sesion.execute(
+        update(Conversacion).where(Conversacion.actualizada < limite).values(historial=[])
+    )
     sesion.commit()
 ```
 
@@ -126,6 +128,7 @@ conversacion = await sesion.scalar(select(Conversacion).where(Conversacion.clave
 ```python
 _identidades: dict[str, tuple[float, dict]] = {}
 
+
 async def identidad(token: str) -> dict:
     clave = hashlib.sha256(token.encode()).hexdigest()
     guardada = _identidades.get(clave)
@@ -153,13 +156,22 @@ async def identidad(token: str) -> dict:
 class Herramienta(Protocol):
     definicion: DefinicionHerramienta
     requiere_confirmacion: bool
+
     async def preparar(self, ctx: Contexto, args: dict) -> dict | Propuesta: ...
     async def ejecutar(self, ctx: Contexto, args: dict) -> str: ...
 
-REGISTRO: dict[str, Herramienta] = {h.definicion.nombre: h for h in (
-    BuscarDisponibilidad(), VerMisTurnos(), EstimarCosto(),
-    ReservarTurno(), CancelarTurno(), ReprogramarTurno(),
-)}
+
+REGISTRO: dict[str, Herramienta] = {
+    h.definicion.nombre: h
+    for h in (
+        BuscarDisponibilidad(),
+        VerMisTurnos(),
+        EstimarCosto(),
+        ReservarTurno(),
+        CancelarTurno(),
+        ReprogramarTurno(),
+    )
+}
 ```
 
 Así, agregar una herramienta es agregar una clase (principio abierto/cerrado), y `nucleo.py` deja de distinguir entre consultas y acciones con `if`.
